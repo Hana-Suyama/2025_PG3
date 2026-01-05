@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <list>
-#include <string.h>
+#include <cstring>
 
 void AddName(const char name[], std::list<std::list<char>>& list) {
 	std::list<char> namelist;
