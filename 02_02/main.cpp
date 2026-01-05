@@ -4,7 +4,7 @@ int RecursiveWage(int Time, int Wage, int AllWage) {
 	if (Time <= 1) {
 		return AllWage;
 	}
-	RecursiveWage(Time - 1, (Wage * 2) - 50, AllWage + (Wage * 2) - 50);
+	return RecursiveWage(Time - 1, (Wage * 2) - 50, AllWage + (Wage * 2) - 50);
 }
 
 void WageCompare(int Time) {
