@@ -1,7 +1,9 @@
 #include <Novice.h>
 #include <memory>
-#include "InputHandler.h"
-#include "Cube.h"
+#include "StageSceneInputHandler.h"
+#include "IStageSceneCommand.h"
+#include "Selector.h"
+#include <list>
 
 const char kWindowTitle[] = "LE2A_10_スヤマハナ_05_02_確認課題";
 
@@ -11,21 +13,24 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// ライブラリの初期化
 	Novice::Initialize(kWindowTitle, 1280, 720);
 
-	// キー入力結果を受け取る箱
-	char keys[256] = {0};
-	char preKeys[256] = {0};
+	char keys_[256] = { 0 };
+	char preKeys_[256] = { 0 };
 
-	std::unique_ptr<InputHandler> inputHandler = std::make_unique<InputHandler>();
-	inputHandler->AssignMoveUpCommand2PressKeyW();
-	inputHandler->AssignMoveLeftCommand2PressKeyA();
-	inputHandler->AssignMoveDownCommand2PressKeyS();
-	inputHandler->AssignMoveRightCommand2PressKeyD();
-	inputHandler->Initialize(keys, preKeys);
+	IStageSceneCommand* iCommand = nullptr;
+	std::list<IStageSceneCommand*> commandHistory_;
+	std::list<IStageSceneCommand*>::iterator commandHistoryItr_;
 
-	ICommand* iCommand = nullptr;
-	std::unique_ptr<Cube> cube = std::make_unique<Cube>();
+	std::unique_ptr<Selector> selector = std::make_unique<Selector>();
+	selector->Init();
 
-	cube->Initialize();
+	std::unique_ptr<StageSceneInputHandler> inputHandler = std::make_unique<StageSceneInputHandler>(selector.get());
+
+	std::list<std::unique_ptr<Unit>> units;
+	for (int i = 0; i < 4; i++) {
+		std::unique_ptr<Unit> unit = std::make_unique<Unit>();
+		unit->Init(i, 2 * i, 2 * i);
+		units.push_back(move(unit));
+	}
 
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
@@ -33,20 +38,55 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		Novice::BeginFrame();
 
 		// キー入力を受け取る
-		memcpy(preKeys, keys, 256);
-		Novice::GetHitKeyStateAll(keys);
+		memcpy(preKeys_, keys_, 256);
+		Novice::GetHitKeyStateAll(keys_);
 
 		///
 		/// ↓更新処理ここから
 		///
 
-		iCommand = inputHandler->HandleInput();
+		inputHandler->UpdateKeyState();
 
-		if (iCommand) {
-			iCommand->Exec(*cube);
+		Unit* selectUnit = nullptr;
+		for (auto& unit : units) {
+			if (unit->GetX() == selector->GetX() && unit->GetY() == selector->GetY()) {
+				selectUnit = unit.get();
+			}
 		}
 
-		cube->Update();
+		if (selector->GetSelectMode() == SELECTOR) {
+			iCommand = inputHandler->SelectorHandleInput(selector.get(), selectUnit);
+			if (iCommand) {
+				iCommand->Exec();
+			}
+		} else if (selector->GetSelectMode() == UNIT) {
+
+			if ((preKeys_[DIK_Z] == 0 && keys_[DIK_Z] != 0) && (keys_[DIK_LCONTROL])) {
+				if (!commandHistory_.empty()) {
+					commandHistory_.pop_back();
+				}
+			}
+
+			iCommand = inputHandler->UnitHandleInput(selector->GetSelectedUnitAddress());
+
+			if (iCommand) {
+				commandHistory_.push_back(iCommand);
+			}
+			
+			selector->StartSet();
+			for(int i = 0; i < commandHistory_.size(); i++){
+				iCommand = *std::next(commandHistory_.begin(), i);
+				if (iCommand) {
+					iCommand->Exec();
+				}
+			}
+		}
+
+		if (iCommand) {
+			if (selector->GetSelectMode() != UNIT) {
+				commandHistory_.clear();
+			}
+		}
 
 		///
 		/// ↑更新処理ここまで
@@ -56,12 +96,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		/// ↓描画処理ここから
 		///
 
-		cube->Draw();
-
 		for (int i = 0; i < 30; i++) {
 			Novice::DrawLine(0, i * 50, 1280, i * 50, BLACK);
 			Novice::DrawLine(i * 50, 0, i * 50, 720, BLACK);
 		}
+
+		for (auto& unit : units) {
+			unit->Draw();
+		}
+
+		selector->Draw();
 
 		///
 		/// ↑描画処理ここまで
@@ -71,9 +115,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		Novice::EndFrame();
 
 		// ESCキーが押されたらループを抜ける
-		if (preKeys[DIK_ESCAPE] == 0 && keys[DIK_ESCAPE] != 0) {
+		/*if (preKeys[DIK_ESCAPE] == 0 && keys[DIK_ESCAPE] != 0) {
 			break;
-		}
+		}*/
 	}
 
 	// ライブラリの終了
